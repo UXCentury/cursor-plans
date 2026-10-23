@@ -1,3 +1,4 @@
+# Run parser tests and prove the extension still packages.
 name: CI
 
 on:

@@ -11,6 +11,7 @@ Cursor has no global list of workspace plans. This extension adds one.
 - Click a plan to open the markdown
 - **Copy build prompt** — paste into a new Agent chat to run the plan (uses the real `@` path)
 - Refreshes when a plan file is added, changed, or deleted
+- Filter the list: All, New, In progress, Done
 
 Optional frontmatter `group:` splits the list. Plans without it stay flat.
 

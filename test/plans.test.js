@@ -1,3 +1,7 @@
+/**
+ * Parser and list-filter checks. These cover the rules the sidebar depends on
+ * without launching VS Code.
+ */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
@@ -9,6 +13,8 @@ const {
   planId,
   collectPlans,
   groupSections,
+  progressOf,
+  filterPlans,
 } = require("../lib/plans");
 
 const SAMPLE = `---
@@ -89,4 +95,26 @@ test("groupSections stays flat until a plan sets group", () => {
     { id: "09", group: "Later", name: "B" },
   ]);
   assert.deepEqual(grouped.map((s) => s.title), ["", "Later"]);
+});
+
+test("progressOf maps todos to new, in progress, and done", () => {
+  assert.equal(progressOf({ todos: [] }), "new");
+  assert.equal(progressOf({ todos: [{ status: "pending" }] }), "new");
+  assert.equal(progressOf({ todos: [{ status: "in_progress" }] }), "in_progress");
+  assert.equal(progressOf({
+    todos: [{ status: "completed" }, { status: "pending" }],
+  }), "in_progress");
+  assert.equal(progressOf({ todos: [{ status: "completed" }, { status: "completed" }] }), "done");
+});
+
+test("filterPlans keeps matching status and all", () => {
+  const plans = [
+    { id: "01", todos: [{ status: "pending" }] },
+    { id: "02", todos: [{ status: "completed" }, { status: "pending" }] },
+    { id: "03", todos: [{ status: "completed" }] },
+  ];
+  assert.deepEqual(filterPlans(plans, "new").map((p) => p.id), ["01"]);
+  assert.deepEqual(filterPlans(plans, "in_progress").map((p) => p.id), ["02"]);
+  assert.deepEqual(filterPlans(plans, "done").map((p) => p.id), ["03"]);
+  assert.equal(filterPlans(plans, "all").length, 3);
 });

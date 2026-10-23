@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.6
+
+- Sidebar tabs to filter All, New, In progress, and Done
+
 ## 0.0.5
 
 - Parser tests (`npm test`) and GitHub Actions CI

@@ -1,7 +1,13 @@
+/**
+ * Cursor Plans — activity-bar list of workspace `*.plan.md` files.
+ *
+ * Parsing lives in `lib/plans.js`. This file wires VS Code: views,
+ * commands, file watchers, and the webview that renders the list.
+ */
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
-const { collectPlans, planDirs, groupSections } = require("./lib/plans");
+const { collectPlans, planDirs, groupSections, progressOf, filterPlans } = require("./lib/plans");
 
 const PLAN_GLOBS = [".cursor/plans/*.plan.md", "docs/plans/*.plan.md"];
 
@@ -30,6 +36,7 @@ function activate(context) {
 
 function deactivate() {}
 
+/** Watch both plan directories across every workspace folder. */
 function watchPlanFiles(onChange) {
   return PLAN_GLOBS.map((glob) => {
     const watcher = vscode.workspace.createFileSystemWatcher("**/" + glob);
@@ -40,6 +47,7 @@ function watchPlanFiles(onChange) {
   });
 }
 
+/** Collapse bursty watcher events so the webview is not rebuilt on every write. */
 function debounce(fn, ms) {
   let timer;
   return () => {
@@ -51,6 +59,7 @@ function debounce(fn, ms) {
 class PlansViewProvider {
   constructor() {
     this.view = undefined;
+    /** False until the webview has attached its message listener. */
     this.ready = false;
   }
 
@@ -59,6 +68,7 @@ class PlansViewProvider {
     this.ready = false;
     webviewView.webview.options = { enableScripts: true };
     webviewView.webview.onDidReceiveMessage((msg) => {
+      // The first payload is dropped if we post before the script is listening.
       if (msg.type === "ready") {
         this.ready = true;
         this.refresh();
@@ -109,11 +119,35 @@ class PlansViewProvider {
       background: transparent;
     }
     .wrap { padding: 8px 10px 16px; }
-    .hint {
-      font-size: 11px;
-      line-height: 1.45;
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      margin: 0 0 10px;
+      border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+    }
+    .tabs button {
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      margin-bottom: -1px;
+      background: transparent;
       color: var(--vscode-descriptionForeground);
-      margin: 0 0 12px;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 8px 6px;
+      cursor: pointer;
+    }
+    .tabs button:hover { color: var(--vscode-foreground); }
+    .tabs button[aria-selected="true"] {
+      color: var(--vscode-foreground);
+      border-bottom-color: var(--vscode-focusBorder);
+    }
+    .tabs .n {
+      font-variant-numeric: tabular-nums;
+      opacity: 0.65;
+      margin-left: 4px;
     }
     .group {
       font-size: 11px;
@@ -182,7 +216,7 @@ class PlansViewProvider {
       color: var(--vscode-descriptionForeground);
     }
     .actions { margin-top: 8px; }
-    button {
+    .card button {
       font: inherit;
       font-size: 11px;
       font-weight: 600;
@@ -193,7 +227,7 @@ class PlansViewProvider {
       background: transparent;
       color: var(--vscode-foreground);
     }
-    button:hover { background: var(--vscode-toolbar-hoverBackground); }
+    .card button:hover { background: var(--vscode-toolbar-hoverBackground); }
     .empty {
       color: var(--vscode-descriptionForeground);
       font-size: 12px;
@@ -210,6 +244,10 @@ class PlansViewProvider {
   <div class="wrap" id="root"></div>
   <script>
     const vscode = acquireVsCodeApi();
+    const saved = vscode.getState() || {};
+    let allPlans = [];
+    // Persist the status tab when the watcher rebuilds the list.
+    let filter = saved.filter || "all";
 
     function esc(s) {
       return String(s || "")
@@ -241,24 +279,58 @@ class PlansViewProvider {
       </article>\`;
     }
 
+    // Shared helpers are injected as source. They must stay plain functions.
+    ${progressOf.toString()}
+    ${filterPlans.toString()}
     ${groupSections.toString()}
 
+    function count(kind) {
+      if (kind === "all") return allPlans.length;
+      return allPlans.filter((p) => progressOf(p) === kind).length;
+    }
+
+    function tab(id, label) {
+      const on = filter === id ? "true" : "false";
+      return \`<button type="button" role="tab" data-filter="\${id}" aria-selected="\${on}">\${label}<span class="n">\${count(id)}</span></button>\`;
+    }
+
     function paint(plans) {
+      if (plans) allPlans = plans;
       const root = document.getElementById("root");
-      if (!plans.length) {
+      if (!allPlans.length) {
         root.innerHTML = '<p class="empty">Add a <code>01-name.plan.md</code> file to <code>.cursor/plans/</code>.</p>';
         return;
       }
-      let html = '<p class="hint">Click a plan to open it. Copy the build prompt into a new Agent chat to run it.</p>';
-      html += groupSections(plans).map((section) => {
-        const heading = section.title ? \`<div class="group">\${esc(section.title)}</div>\` : "";
-        return heading + section.plans.map(card).join("");
-      }).join("");
+      const shown = filterPlans(allPlans, filter);
+      const labels = { new: "new", in_progress: "in progress", done: "done" };
+      let html = '<div class="tabs" role="tablist" aria-label="Plan status">' +
+        tab("all", "All") +
+        tab("new", "New") +
+        tab("in_progress", "In progress") +
+        tab("done", "Done") +
+        "</div>";
+      if (!shown.length) {
+        html += \`<p class="empty">No \${labels[filter] || ""} plans.</p>\`;
+      } else {
+        html += groupSections(shown).map((section) => {
+          const heading = section.title ? \`<div class="group">\${esc(section.title)}</div>\` : "";
+          return heading + section.plans.map(card).join("");
+        }).join("");
+      }
       root.innerHTML = html;
     }
 
     const root = document.getElementById("root");
     root.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-filter]");
+      if (tabBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        filter = tabBtn.getAttribute("data-filter");
+        vscode.setState({ filter });
+        paint();
+        return;
+      }
       const copy = e.target.closest("[data-copy]");
       if (copy) {
         e.preventDefault();
@@ -290,6 +362,7 @@ class PlansViewProvider {
   }
 }
 
+/** Attach a VS Code URI so the webview can ask the extension to open the file. */
 function scanPlans() {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || !folders.length) return [];
@@ -301,6 +374,7 @@ function scanPlans() {
   }));
 }
 
+/** Open a plans README if one exists; otherwise reveal the plans folder. */
 async function openIndex() {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || !folders.length) {

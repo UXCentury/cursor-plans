@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Package this folder as a VSIX and install it into Cursor.
+# Removes leftover copies from earlier publisher ids / versions first.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 EXT_DIR="${HOME}/.cursor/extensions"

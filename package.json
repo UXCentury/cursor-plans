@@ -2,7 +2,7 @@
   "name": "cursor-plans",
   "displayName": "Cursor Plans",
   "description": "Sidebar for workspace *.plan.md files. Open a plan or copy a Cursor Agent build prompt.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "uxcentury",
   "author": {
     "name": "UXCentury",
