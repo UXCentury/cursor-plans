@@ -1,6 +1,8 @@
 .vscode/**
 .cursor/**
+.github/**
 .git/**
 .gitignore
 *.vsix
 install.sh
+test/**

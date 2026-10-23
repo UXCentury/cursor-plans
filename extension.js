@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
+const { collectPlans, planDirs, groupSections } = require("./lib/plans");
 
 const PLAN_GLOBS = [".cursor/plans/*.plan.md", "docs/plans/*.plan.md"];
 
@@ -240,32 +241,19 @@ class PlansViewProvider {
       </article>\`;
     }
 
+    ${groupSections.toString()}
+
     function paint(plans) {
       const root = document.getElementById("root");
       if (!plans.length) {
         root.innerHTML = '<p class="empty">Add a <code>01-name.plan.md</code> file to <code>.cursor/plans/</code>.</p>';
         return;
       }
-      const hasGroups = plans.some((p) => p.group);
       let html = '<p class="hint">Click a plan to open it. Copy the build prompt into a new Agent chat to run it.</p>';
-      if (!hasGroups) {
-        html += plans.map(card).join("");
-      } else {
-        const order = [];
-        const map = new Map();
-        for (const p of plans) {
-          const g = p.group || "";
-          if (!map.has(g)) {
-            map.set(g, []);
-            order.push(g);
-          }
-          map.get(g).push(p);
-        }
-        html += order.map((g) => {
-          const heading = g ? \`<div class="group">\${esc(g)}</div>\` : "";
-          return heading + map.get(g).map(card).join("");
-        }).join("");
-      }
+      html += groupSections(plans).map((section) => {
+        const heading = section.title ? \`<div class="group">\${esc(section.title)}</div>\` : "";
+        return heading + section.plans.map(card).join("");
+      }).join("");
       root.innerHTML = html;
     }
 
@@ -302,73 +290,15 @@ class PlansViewProvider {
   }
 }
 
-function planDirs(root) {
-  return [
-    path.join(root, ".cursor", "plans"),
-    path.join(root, "docs", "plans"),
-  ];
-}
-
 function scanPlans() {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || !folders.length) return [];
-  const found = new Map();
-  for (const folder of folders) {
-    const root = folder.uri.fsPath;
-    for (const dir of planDirs(root)) {
-      if (!fs.existsSync(dir)) continue;
-      for (const name of fs.readdirSync(dir).sort()) {
-        if (!name.endsWith(".plan.md")) continue;
-        const id = (name.match(/^(\d{2})-/) || [])[1];
-        if (!id) continue;
-        const abs = path.join(dir, name);
-        const rel = path.relative(root, abs).split(path.sep).join("/");
-        const key = folder.index + ":" + rel;
-        if (found.has(key)) continue;
-        const parsed = parsePlan(abs, name);
-        parsed.id = id;
-        parsed.rel = rel;
-        parsed.uri = vscode.Uri.file(abs).toString();
-        parsed.prompt = [
-          "Build this plan. Do not edit the plan file itself. Follow it as specified.",
-          "",
-          "@" + rel,
-        ].join("\n");
-        found.set(key, parsed);
-      }
-    }
-  }
-  return [...found.values()].sort((a, b) => {
-    const byId = a.id.localeCompare(b.id);
-    return byId || a.rel.localeCompare(b.rel);
-  });
-}
-
-function parsePlan(abs, filename) {
-  const raw = fs.readFileSync(abs, "utf8");
-  const fm = raw.startsWith("---") ? raw.slice(3).split("\n---")[0] : "";
-  const nameMatch = fm.match(/^name:\s*(.+)$/m);
-  const overviewMatch = fm.match(/^overview:\s*"?(.+?)"?\s*$/m);
-  const groupMatch = fm.match(/^group:\s*"?(.+?)"?\s*$/m);
-  const todos = [];
-  const todoBlock = fm.split(/^todos:\s*$/m)[1] || "";
-  const chunks = todoBlock.split(/^\s*- id:/m).slice(1);
-  for (const chunk of chunks) {
-    const status = (chunk.match(/status:\s*(\w+)/) || [])[1] || "pending";
-    const content = (chunk.match(/content:\s*"(.+)"/) || [])[1] || "";
-    todos.push({ status, content });
-  }
-  const fallback = filename.replace(/\.plan\.md$/, "").replace(/^\d{2}-/, "").replace(/-/g, " ");
-  return {
-    name: nameMatch ? nameMatch[1].trim() : fallback,
-    overview: stripQuotes(overviewMatch ? overviewMatch[1] : ""),
-    group: stripQuotes(groupMatch ? groupMatch[1] : ""),
-    todos,
-  };
-}
-
-function stripQuotes(s) {
-  return s.replace(/\*\*/g, "").replace(/^"|"$/g, "").trim();
+  return collectPlans(
+    folders.map((folder) => ({ root: folder.uri.fsPath, index: folder.index })),
+  ).map((plan) => ({
+    ...plan,
+    uri: vscode.Uri.file(plan.abs).toString(),
+  }));
 }
 
 async function openIndex() {

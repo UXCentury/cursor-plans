@@ -1,8 +1,8 @@
 # Cursor Plans
 
-Cursor has no global list of workspace plans. This extension adds one.
+[![CI](https://github.com/UXCentury/cursor-plans/actions/workflows/ci.yml/badge.svg)](https://github.com/UXCentury/cursor-plans/actions/workflows/ci.yml)
 
-**Publisher:** [UXCentury](https://uxcentury.com)
+Cursor has no global list of workspace plans. This extension adds one.
 
 ## What it does
 
@@ -31,7 +31,9 @@ group: Later
 Built by **UXCentury** (UXC LLC), a design and engineering studio in Yerevan.
 
 - Website: [uxcentury.com](https://uxcentury.com)
-- Contact: [sales@uxcentury.com](mailto:sales@uxcentury.com)
+- Source: [github.com/UXCentury/cursor-plans](https://github.com/UXCentury/cursor-plans)
+
+`npm test` runs the parser checks. GitHub Actions runs that and packages the VSIX on every push.
 
 ## License
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.5
+
+- Parser tests (`npm test`) and GitHub Actions CI
+- Repository and issue links point at GitHub
+
 ## 0.0.4
 
 - Copy build prompt uses the plan file's real workspace path
