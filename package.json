@@ -1,8 +1,8 @@
 {
   "name": "cursor-plans",
   "displayName": "Cursor Plans",
-  "description": "Sidebar for workspace *.plan.md files. Open a plan or copy a Cursor Agent build prompt.",
-  "version": "0.0.6",
+  "description": "Sidebar for this project's *.plan.md files. Save a home-folder plan into the workspace, export or import a .cplan bundle.",
+  "version": "0.0.10",
   "publisher": "uxcentury",
   "author": {
     "name": "UXCentury",
@@ -37,6 +37,7 @@
     "cursor",
     "plans",
     "plan.md",
+    "cplan",
     "agent",
     "sidebar",
     "todo",
@@ -65,6 +66,24 @@
         "command": "plans.focus",
         "title": "Show sidebar",
         "category": "Plans"
+      },
+      {
+        "command": "plans.saveToWorkspace",
+        "title": "Save to workspace",
+        "category": "Plans",
+        "icon": "$(desktop-download)"
+      },
+      {
+        "command": "plans.export",
+        "title": "Export",
+        "category": "Plans",
+        "icon": "$(export)"
+      },
+      {
+        "command": "plans.import",
+        "title": "Import",
+        "category": "Plans",
+        "icon": "$(desktop-upload)"
       }
     ],
     "viewsContainers": {
@@ -104,8 +123,35 @@
           "command": "plans.openIndex",
           "when": "view == plans.sidebar || view == plans.explorer",
           "group": "navigation"
+        },
+        {
+          "command": "plans.saveToWorkspace",
+          "when": "view == plans.sidebar || view == plans.explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "plans.export",
+          "when": "view == plans.sidebar || view == plans.explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "plans.import",
+          "when": "view == plans.sidebar || view == plans.explorer",
+          "group": "navigation"
         }
       ]
+    },
+    "languages": [
+      {
+        "id": "cplan",
+        "aliases": ["Cursor Plans"],
+        "extensions": [".cplan"]
+      }
+    ],
+    "configurationDefaults": {
+      "files.associations": {
+        "*.cplan": "json"
+      }
     }
   }
 }
