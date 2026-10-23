@@ -1,0 +1,105 @@
+{
+  "name": "cursor-plans",
+  "displayName": "Cursor Plans",
+  "description": "Sidebar for workspace *.plan.md files. Open a plan or copy a Cursor Agent build prompt.",
+  "version": "0.0.4",
+  "publisher": "uxcentury",
+  "author": {
+    "name": "UXCentury",
+    "email": "sales@uxcentury.com",
+    "url": "https://uxcentury.com"
+  },
+  "license": "MIT",
+  "homepage": "https://uxcentury.com",
+  "bugs": {
+    "url": "https://uxcentury.com/contact-us",
+    "email": "sales@uxcentury.com"
+  },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0B1220",
+    "theme": "dark"
+  },
+  "preview": true,
+  "pricing": "Free",
+  "qna": false,
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "keywords": [
+    "cursor",
+    "plans",
+    "plan.md",
+    "agent",
+    "sidebar",
+    "todo",
+    "uxcentury"
+  ],
+  "activationEvents": [
+    "onView:plans.sidebar",
+    "onView:plans.explorer"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "plans.refresh",
+        "title": "Refresh",
+        "category": "Plans",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "plans.openIndex",
+        "title": "Reveal folder",
+        "category": "Plans",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "plans.focus",
+        "title": "Show sidebar",
+        "category": "Plans"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "plans",
+          "title": "Plans",
+          "icon": "media/activity-bar.svg"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "plans.explorer",
+          "name": "Plans"
+        }
+      ],
+      "plans": [
+        {
+          "type": "webview",
+          "id": "plans.sidebar",
+          "name": "Plans",
+          "icon": "media/activity-bar.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "plans.refresh",
+          "when": "view == plans.sidebar || view == plans.explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "plans.openIndex",
+          "when": "view == plans.sidebar || view == plans.explorer",
+          "group": "navigation"
+        }
+      ]
+    }
+  }
+}
