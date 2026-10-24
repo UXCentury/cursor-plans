@@ -11,8 +11,9 @@ cursor --uninstall-extension workspace.plans >/dev/null 2>&1 || true
 rm -rf "${EXT_DIR}"/uxcentury.cursor-plans-* "${EXT_DIR}"/workspace.plans-*
 
 cd "$ROOT"
-npx --yes @vscode/vsce package --allow-missing-repository --no-dependencies \
-  --baseContentUrl https://uxcentury.com --baseImagesUrl https://uxcentury.com \
+npx --yes @vscode/vsce package --no-dependencies \
+  --baseContentUrl https://github.com/UXCentury/cursor-plans/raw/main/ \
+  --baseImagesUrl https://github.com/UXCentury/cursor-plans/raw/main/ \
   --out "$VSIX"
 cursor --install-extension "$VSIX"
 

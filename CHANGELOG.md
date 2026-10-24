@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.13
+
+- Restore the sidebar after the loading overlay left a blank panel
+
+## 0.0.12
+
+- Restore the sidebar list after the loading overlay hid the UI
+
+## 0.0.11
+
+- Show the extension icon while the sidebar loads after install
+
 ## 0.0.10
 
 - Export all, one, or selected plans to a `.cplan` file, with a progress bar

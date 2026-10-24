@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/UXCentury/cursor-plans/actions/workflows/ci.yml/badge.svg)](https://github.com/UXCentury/cursor-plans/actions/workflows/ci.yml)
 
+![Plans sidebar](media/sidebar.png)
+
 Cursor has no global list of workspace plans. New plans land in `~/.cursor/plans`, and Save to Workspace is missing in WSL, Dev Containers, and Remote SSH. This extension lists **this project only**, and can move a home-folder plan in when you ask.
 
 ## What it does

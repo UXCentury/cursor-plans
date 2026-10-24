@@ -38,9 +38,17 @@ function broadcast(msg) {
   for (const view of providers) view.post(msg);
 }
 
+function cspNonce() {
+  let s = "";
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i += 1) s += chars.charAt(Math.floor(Math.random() * chars.length));
+  return s;
+}
+
 function activate(context) {
-  const sidebar = new PlansViewProvider();
-  const explorer = new PlansViewProvider();
+  providers.length = 0;
+  const sidebar = new PlansViewProvider(context.extensionUri);
+  const explorer = new PlansViewProvider(context.extensionUri);
   providers.push(sidebar, explorer);
   const opts = { webviewOptions: { retainContextWhenHidden: true } };
   const refreshAll = debounce(() => {
@@ -82,15 +90,19 @@ function watchPlanFiles(onChange) {
 
 /** Home-folder plans live outside the workspace, so watch that directory directly. */
 function watchHomePlans(onChange) {
-  const dir = homePlansDir();
-  if (!fs.existsSync(dir)) return [];
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(dir), "*.plan.md"),
-  );
-  watcher.onDidCreate(onChange);
-  watcher.onDidChange(onChange);
-  watcher.onDidDelete(onChange);
-  return [watcher];
+  try {
+    const dir = homePlansDir();
+    if (!fs.existsSync(dir)) return [];
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(dir), "*.plan.md"),
+    );
+    watcher.onDidCreate(onChange);
+    watcher.onDidChange(onChange);
+    watcher.onDidDelete(onChange);
+    return [watcher];
+  } catch {
+    return [];
+  }
 }
 
 /** Collapse bursty watcher events so the webview is not rebuilt on every write. */
@@ -103,7 +115,8 @@ function debounce(fn, ms) {
 }
 
 class PlansViewProvider {
-  constructor() {
+  constructor(extensionUri) {
+    this.extensionUri = extensionUri;
     this.view = undefined;
     /** False until the webview has attached its message listener. */
     this.ready = false;
@@ -112,7 +125,10 @@ class PlansViewProvider {
   resolveWebviewView(webviewView) {
     this.view = webviewView;
     this.ready = false;
-    webviewView.webview.options = { enableScripts: true };
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: this.extensionUri ? [this.extensionUri] : [],
+    };
     webviewView.webview.onDidReceiveMessage((msg) => {
       // The first payload is dropped if we post before the script is listening.
       if (msg.type === "ready") {
@@ -123,9 +139,17 @@ class PlansViewProvider {
       this.onMessage(msg);
     });
     webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible) this.refresh();
+      if (webviewView.visible && this.ready) this.refresh();
     });
-    webviewView.webview.html = this.render();
+    try {
+      webviewView.webview.html = this.render(webviewView.webview);
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      webviewView.webview.html =
+        '<!DOCTYPE html><html><body style="color:#ccc;background:#1e1e1e;font:12px sans-serif;padding:12px">Plans failed to load.<pre>' +
+        message.replace(/</g, "&lt;") +
+        "</pre></body></html>";
+    }
   }
 
   post(msg) {
@@ -134,7 +158,12 @@ class PlansViewProvider {
   }
 
   refresh() {
-    this.post({ type: "plans", ...scanPlans() });
+    try {
+      this.post({ type: "plans", ...scanPlans() });
+    } catch (err) {
+      console.error(err);
+      this.post({ type: "plans", plans: [], activeHome: null });
+    }
   }
 
   async onMessage(msg) {
@@ -167,21 +196,28 @@ class PlansViewProvider {
     }
   }
 
-  render() {
+  render(webview) {
+    const nonce = cspNonce();
+    const csp =
+      "default-src 'none'; style-src " +
+      (webview && webview.cspSource ? webview.cspSource + " " : "") +
+      "'unsafe-inline'; script-src 'nonce-" +
+      nonce +
+      "' 'unsafe-inline';";
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <style>
     :root { color-scheme: light dark; }
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
-      font-family: var(--vscode-font-family);
-      font-size: var(--vscode-font-size);
-      color: var(--vscode-foreground);
+      min-height: 100%;
+      font-family: var(--vscode-font-family, sans-serif);
+      font-size: var(--vscode-font-size, 13px);
+      color: var(--vscode-foreground, #cccccc);
       background: transparent;
     }
     .wrap { padding: 8px 10px 16px; }
@@ -221,10 +257,10 @@ class PlansViewProvider {
       box-sizing: border-box;
       margin: 0 0 8px;
       padding: 4px 8px;
-      border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
+      border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, #3c3c3c));
       border-radius: 4px;
-      background: var(--vscode-input-background);
-      color: var(--vscode-input-foreground);
+      background: var(--vscode-input-background, #3c3c3c);
+      color: var(--vscode-input-foreground, #cccccc);
       font: inherit;
       font-size: 12px;
       outline: none;
@@ -370,7 +406,7 @@ class PlansViewProvider {
     }
     .callout button:hover { background: var(--vscode-button-hoverBackground); }
     .empty {
-      color: var(--vscode-descriptionForeground);
+      color: var(--vscode-descriptionForeground, #9da7b3);
       font-size: 12px;
       line-height: 1.5;
       padding: 12px 4px;
@@ -435,13 +471,14 @@ class PlansViewProvider {
       <div id="xfer-label" class="xfer-label"></div>
       <div class="xfer-bar"><i id="xfer-bar"></i></div>
     </div>
-    <input id="q" class="search" type="search" placeholder="Search plans" aria-label="Search plans" hidden />
+    <input id="q" class="search" type="search" placeholder="Search plans" aria-label="Search plans" />
     <div id="tabs" class="tabs" role="tablist" aria-label="Plan status" hidden></div>
     <div id="selbar"></div>
-    <div id="list"></div>
+    <div id="list"><p class="empty" style="color:#9da7b3">Loading plans…</p></div>
     <div id="pager"></div>
   </div>
-  <script>
+  <script nonce="${nonce}">
+    try {
     const vscode = acquireVsCodeApi();
     const saved = vscode.getState() || {};
     let allPlans = [];
@@ -468,8 +505,9 @@ class PlansViewProvider {
     }
 
     function card(p) {
-      const done = p.todos.filter((t) => t.status === "completed").length;
-      const total = p.todos.length;
+      const todos = p.todos || [];
+      const done = todos.filter((t) => t.status === "completed").length;
+      const total = todos.length;
       const pct = total ? Math.round((done / total) * 100) : 0;
       const on = selected.has(p.uri) ? "checked" : "";
       return \`<article class="card" data-open="\${escAttr(p.uri)}" role="button" tabindex="0">
@@ -575,6 +613,7 @@ class PlansViewProvider {
     }
 
     function paint(payload) {
+      try {
       if (payload) {
         allPlans = payload.plans || [];
         activeHome = payload.activeHome || null;
@@ -615,9 +654,14 @@ class PlansViewProvider {
       }
       list.innerHTML = workspaceHtml(slice.items);
       pager.innerHTML = pagerHtml(slice);
+      } catch (err) {
+        const list = document.getElementById("list");
+        if (list) list.innerHTML = '<p class="empty">' + esc(err && err.message ? err.message : String(err)) + '</p>';
+      }
     }
 
     const wrap = document.querySelector(".wrap");
+    if (!wrap) throw new Error("Plans markup missing");
     wrap.addEventListener("click", (e) => {
       const tabBtn = e.target.closest("[data-filter]");
       if (tabBtn) {
@@ -742,6 +786,10 @@ class PlansViewProvider {
     });
     vscode.postMessage({ type: "ready" });
     postSelection();
+    } catch (err) {
+      const list = document.getElementById("list");
+      if (list) list.innerHTML = '<p class="empty">' + String(err) + '</p>';
+    }
   </script>
 </body>
 </html>`;

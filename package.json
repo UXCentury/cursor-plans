@@ -2,7 +2,7 @@
   "name": "cursor-plans",
   "displayName": "Cursor Plans",
   "description": "Sidebar for this project's *.plan.md files. Save a home-folder plan into the workspace, export or import a .cplan bundle.",
-  "version": "0.0.10",
+  "version": "0.0.13",
   "publisher": "uxcentury",
   "author": {
     "name": "UXCentury",
@@ -32,11 +32,14 @@
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": ["Other"],
+  "categories": ["AI", "Other"],
   "keywords": [
     "cursor",
+    "ai",
+    "plan",
     "plans",
     "plan.md",
+    "plan mode",
     "cplan",
     "agent",
     "sidebar",
@@ -44,6 +47,7 @@
     "uxcentury"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onView:plans.sidebar",
     "onView:plans.explorer"
   ],
@@ -108,7 +112,8 @@
           "type": "webview",
           "id": "plans.sidebar",
           "name": "Plans",
-          "icon": "media/activity-bar.svg"
+          "icon": "media/activity-bar.svg",
+          "visibility": "visible"
         }
       ]
     },
