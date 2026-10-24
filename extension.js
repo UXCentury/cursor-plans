@@ -4,9 +4,9 @@
  * Parsing lives in `lib/plans.js`. This file wires VS Code: views,
  * commands, file watchers, and the webview that renders the list.
  *
- * Cursor writes new plans to `~/.cursor/plans`. The sidebar lists this
- * project only. Save to workspace moves a home-folder plan in by picker
- * or from the file you already have open.
+ * Cursor writes new plans to `~/.cursor/plans`. On Windows that is
+ * `C:\Users\<you>\.cursor\plans`, not a folder inside the repo. The sidebar
+ * lists both. Save to workspace moves a home-folder plan into the project.
  */
 const vscode = require("vscode");
 const fs = require("fs");
@@ -14,6 +14,7 @@ const path = require("path");
 const {
   collectPlans,
   collectHomePlans,
+  listSidebarPlans,
   homeDirOverlapsWorkspace,
   homePlansDir,
   planDirs,
@@ -482,6 +483,7 @@ class PlansViewProvider {
     const vscode = acquireVsCodeApi();
     const saved = vscode.getState() || {};
     let allPlans = [];
+    let homeDir = "";
     let activeHome = null;
     // Persist tab, query, and page when the watcher rebuilds the list.
     let filter = saved.filter || "all";
@@ -518,9 +520,10 @@ class PlansViewProvider {
             <div class="name">\${esc(p.name)}</div>
             <div class="overview">\${esc(p.overview)}</div>
             <div class="bar"><i style="width:\${pct}%"></i></div>
-            <div class="meta">\${done}/\${total} done</div>
+            <div class="meta">\${done}/\${total} done\${p.source === "home" ? " · home folder" : ""}</div>
             <div class="actions">
               <button type="button" data-copy="\${escAttr(p.prompt)}">Copy build prompt</button>
+              \${p.source === "home" ? \`<button type="button" data-save="\${escAttr(p.uri)}">Save to workspace</button>\` : ""}
               <button type="button" data-export-one="\${escAttr(p.uri)}">Export</button>
             </div>
           </div>
@@ -591,10 +594,14 @@ class PlansViewProvider {
     }
 
     function bannerHtml() {
-      if (!activeHome) return "";
-      return \`<div class="callout">
+      let html = "";
+      if (homeDir && allPlans.some((p) => p.source === "home")) {
+        html += \`<p class="note">Cursor stores plans in <code>\${esc(homeDir)}</code></p>\`;
+      }
+      if (!activeHome) return html;
+      return html + \`<div class="callout">
         <div class="name">\${esc(activeHome.name)}</div>
-        <p class="note">This file is in ~/.cursor/plans, not this project.</p>
+        <p class="note">This file is in the home folder, not this project.</p>
         <button type="button" data-save="\${escAttr(activeHome.uri)}">Save to workspace</button>
       </div>\`;
     }
@@ -616,6 +623,7 @@ class PlansViewProvider {
       try {
       if (payload) {
         allPlans = payload.plans || [];
+        homeDir = payload.homeDir || "";
         activeHome = payload.activeHome || null;
         pruneSelected();
       }
@@ -632,7 +640,7 @@ class PlansViewProvider {
         selbar.innerHTML = selbarHtml();
         pager.innerHTML = "";
         pageUris = [];
-        list.innerHTML = '<p class="empty">No plan files in this project. Cursor saves new plans to <code>~/.cursor/plans</code>. Run <strong>Plans: Save to workspace</strong> to move one here, or Import a <code>.cplan</code> file.</p>';
+        list.innerHTML = '<p class="empty">No plan files in this project or in <code>' + esc(homeDir || "~/.cursor/plans") + '</code>.</p>';
         return;
       }
       qEl.hidden = false;
@@ -819,12 +827,14 @@ function activeHomePlan() {
   return withUri({ ...parsed, id: "", abs, rel: name, source: "home", prompt: "" });
 }
 
-/** This project's plans only. A home-folder file appears as a banner if it is open. */
+/** Workspace plans plus the user home folder Cursor actually writes to. */
 function scanPlans() {
   const folders = workspaceFolders();
-  if (!folders.length) return { plans: [], activeHome: null };
+  const homeDir = homePlansDir();
+  if (!folders.length) return { plans: [], homeDir, activeHome: null };
   return {
-    plans: collectPlans(folders).map(withUri),
+    plans: listSidebarPlans(folders, homeDir).map(withUri),
+    homeDir,
     activeHome: activeHomePlan(),
   };
 }
@@ -849,11 +859,20 @@ async function saveUriToWorkspace(uriString) {
     vscode.window.showWarningMessage("Only plans in ~/.cursor/plans can be saved to the workspace.");
     return;
   }
-  const dest = savePlanToWorkspace(abs, root);
+  let dest;
+  try {
+    dest = savePlanToWorkspace(abs, root);
+  } catch (err) {
+    vscode.window.showErrorMessage(
+      "Could not save the plan: " + (err && err.message ? err.message : String(err)),
+    );
+    return;
+  }
   const rel = path.relative(root, dest).split(path.sep).join("/");
   const doc = await vscode.workspace.openTextDocument(dest);
   await vscode.window.showTextDocument(doc, { preview: true });
-  vscode.window.showInformationMessage("Saved to " + rel);
+  const note = fs.existsSync(abs) ? " The original is still in ~/.cursor/plans." : "";
+  vscode.window.showInformationMessage("Saved to " + rel + "." + note);
 }
 
 async function pickAndSaveHomePlan() {
@@ -899,7 +918,7 @@ async function saveActiveEditor() {
 }
 
 function plansForExport(uris) {
-  const all = collectPlans(workspaceFolders());
+  const all = listSidebarPlans(workspaceFolders(), homePlansDir());
   if (!uris || !uris.length) return all;
   const want = new Set(uris);
   return all.filter((p) => want.has(vscode.Uri.file(p.abs).toString()));

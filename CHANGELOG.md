@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.15
+
+- Fix the empty sidebar on Windows. Cursor stores plans in `C:\Users\<you>\.cursor\plans`, and the list now reads that folder.
+
+## 0.0.14
+
+- Save to workspace on Windows when the drive letter casing does not match (`c:\` vs `C:\`)
+- Copy a plan across drives, and leave the original in place if the editor still has it open
+
 ## 0.0.13
 
 - Restore the sidebar after the loading overlay left a blank panel

@@ -14,7 +14,9 @@ const {
   planId,
   collectPlans,
   collectHomePlans,
+  listSidebarPlans,
   homeDirOverlapsWorkspace,
+  isUnderDir,
   uniquePlanPath,
   savePlanToWorkspace,
   groupSections,
@@ -129,6 +131,25 @@ test("collectHomePlans skips workspace names, newest first, and caps the list", 
   assert.equal(all.omitted, 0);
 });
 
+test("listSidebarPlans adds home-folder plans and skips names already in the workspace", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-side-ws-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-side-home-"));
+  fs.mkdirSync(path.join(root, ".cursor", "plans"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".cursor", "plans", "01-demo.plan.md"), SAMPLE);
+  fs.writeFileSync(path.join(home, "01-demo.plan.md"), SAMPLE);
+  fs.writeFileSync(path.join(home, "from_home_aaaaaaaa.plan.md"), SAMPLE);
+
+  const plans = listSidebarPlans([{ root, index: 0 }], home);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true });
+
+  assert.deepEqual(
+    plans.map((p) => p.source + ":" + path.basename(p.abs)),
+    ["workspace:01-demo.plan.md", "home:from_home_aaaaaaaa.plan.md"],
+  );
+  assert.match(plans[1].prompt, /from_home_aaaaaaaa\.plan\.md/);
+});
+
 test("homeDirOverlapsWorkspace detects ~/.cursor/plans inside the project", () => {
   assert.equal(
     homeDirOverlapsWorkspace("/tmp/proj/.cursor/plans", [{ root: "/tmp/proj" }]),
@@ -136,6 +157,23 @@ test("homeDirOverlapsWorkspace detects ~/.cursor/plans inside the project", () =
   );
   assert.equal(
     homeDirOverlapsWorkspace("/home/user/.cursor/plans", [{ root: "/tmp/proj" }]),
+    false,
+  );
+});
+
+test("isUnderDir matches a Windows path when only the drive letter case differs", () => {
+  const win = path.win32;
+  const dir = "C:\\Users\\me\\.cursor\\plans";
+  assert.equal(isUnderDir("c:\\Users\\me\\.cursor\\plans\\demo.plan.md", dir, win), true);
+  assert.equal(isUnderDir("c:\\Users\\me\\.cursor\\plans", dir, win), true);
+  assert.equal(isUnderDir("c:\\Users\\me\\.cursor\\plans-extra\\demo.plan.md", dir, win), false);
+  assert.equal(isUnderDir("D:\\Users\\me\\.cursor\\plans\\demo.plan.md", dir, win), false);
+  assert.equal(
+    homeDirOverlapsWorkspace("c:\\proj\\.cursor\\plans", [{ root: "C:\\proj" }], win),
+    true,
+  );
+  assert.equal(
+    homeDirOverlapsWorkspace("c:\\Users\\me\\.cursor\\plans", [{ root: "C:\\proj" }], win),
     false,
   );
 });
@@ -159,6 +197,33 @@ test("savePlanToWorkspace moves the file into .cursor/plans", () => {
   assert.equal(dest, expected);
   assert.equal(fs.existsSync(src), false);
   assert.equal(fs.existsSync(expected), true);
+
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("savePlanToWorkspace keeps the copy when the original cannot be renamed or deleted", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-save-locked-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-save-locked-ws-"));
+  const src = path.join(home, "locked_deadbeef.plan.md");
+  fs.writeFileSync(src, SAMPLE);
+  const io = {
+    exists: fs.existsSync,
+    mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
+    rename: () => {
+      throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+    },
+    copyFile: fs.copyFileSync,
+    unlink: () => {
+      throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
+    },
+  };
+
+  const dest = savePlanToWorkspace(src, root, io);
+
+  assert.equal(dest, path.join(root, ".cursor", "plans", "locked_deadbeef.plan.md"));
+  assert.equal(fs.existsSync(dest), true);
+  assert.equal(fs.existsSync(src), true);
 
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(root, { recursive: true, force: true });
