@@ -139,7 +139,7 @@ test("listSidebarPlans adds home-folder plans and skips names already in the wor
   fs.writeFileSync(path.join(home, "01-demo.plan.md"), SAMPLE);
   fs.writeFileSync(path.join(home, "from_home_aaaaaaaa.plan.md"), SAMPLE);
 
-  const plans = listSidebarPlans([{ root, index: 0 }], home);
+  const { plans } = listSidebarPlans([{ root, index: 0 }], home);
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(home, { recursive: true, force: true });
 
@@ -148,6 +148,24 @@ test("listSidebarPlans adds home-folder plans and skips names already in the wor
     ["workspace:01-demo.plan.md", "home:from_home_aaaaaaaa.plan.md"],
   );
   assert.match(plans[1].prompt, /from_home_aaaaaaaa\.plan\.md/);
+});
+
+test("listSidebarPlans caps home-folder entries on every platform", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-side-ws2-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-side-home2-"));
+  fs.mkdirSync(path.join(root, ".cursor", "plans"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".cursor", "plans", "01-demo.plan.md"), SAMPLE);
+  for (let i = 0; i < 45; i += 1) {
+    fs.writeFileSync(path.join(home, `extra_${String(i).padStart(2, "0")}_aaaaaaaa.plan.md`), SAMPLE);
+  }
+
+  const { plans, homeOmitted } = listSidebarPlans([{ root, index: 0 }], home);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true });
+
+  assert.equal(plans.filter((p) => p.source === "workspace").length, 1);
+  assert.equal(plans.filter((p) => p.source === "home").length, 40);
+  assert.equal(homeOmitted, 5);
 });
 
 test("homeDirOverlapsWorkspace detects ~/.cursor/plans inside the project", () => {

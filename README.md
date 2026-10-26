@@ -4,7 +4,7 @@
 
 ![Plans sidebar](media/sidebar.png)
 
-Cursor has no global list of workspace plans. New plans land in `~/.cursor/plans`. On Windows that folder is `C:\Users\<you>\.cursor\plans`, not a directory inside the repo. This extension lists that home folder and this project's `.cursor/plans`, and can move a home-folder plan in when you ask.
+Cursor has no global list of workspace plans. New plans land in `~/.cursor/plans` (on Windows, `C:\Users\<you>\.cursor\plans`). The sidebar lists this project's `.cursor/plans` plus the **40 newest** home-folder plans that are not already in the project—the same on macOS, Linux, and Windows. Use **Save to workspace** to move one into the repo, or the command picker to reach older home-folder plans.
 
 ## What it does
 

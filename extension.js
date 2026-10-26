@@ -34,32 +34,32 @@ const PLAN_GLOBS = [".cursor/plans/*.plan.md", "docs/plans/*.plan.md"];
 
 const providers = [];
 let lastSelection = [];
+/** Cursor can call activate more than once; registering webview providers twice breaks the sidebar. */
+let sidebarProvider;
+let explorerProvider;
 
 function broadcast(msg) {
   for (const view of providers) view.post(msg);
 }
 
-function cspNonce() {
-  let s = "";
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (let i = 0; i < 32; i += 1) s += chars.charAt(Math.floor(Math.random() * chars.length));
-  return s;
-}
-
 function activate(context) {
-  providers.length = 0;
-  const sidebar = new PlansViewProvider(context.extensionUri);
-  const explorer = new PlansViewProvider(context.extensionUri);
-  providers.push(sidebar, explorer);
-  const opts = { webviewOptions: { retainContextWhenHidden: true } };
+  if (sidebarProvider) {
+    sidebarProvider.refresh();
+    explorerProvider.refresh();
+    return;
+  }
+  sidebarProvider = new PlansViewProvider(context.extensionUri);
+  explorerProvider = new PlansViewProvider(context.extensionUri);
+  providers.push(sidebarProvider, explorerProvider);
+  const opts = { webviewOptions: { retainContextWhenHidden: false } };
   const refreshAll = debounce(() => {
-    sidebar.refresh();
-    explorer.refresh();
+    sidebarProvider.refresh();
+    explorerProvider.refresh();
   }, 80);
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("plans.sidebar", sidebar, opts),
-    vscode.window.registerWebviewViewProvider("plans.explorer", explorer, opts),
+    vscode.window.registerWebviewViewProvider("plans.sidebar", sidebarProvider, opts),
+    vscode.window.registerWebviewViewProvider("plans.explorer", explorerProvider, opts),
     vscode.commands.registerCommand("plans.refresh", refreshAll),
     vscode.commands.registerCommand("plans.openIndex", () => openIndex()),
     vscode.commands.registerCommand("plans.saveToWorkspace", () => saveActiveEditor()),
@@ -140,10 +140,10 @@ class PlansViewProvider {
       this.onMessage(msg);
     });
     webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible && this.ready) this.refresh();
+      if (webviewView.visible) this.refresh();
     });
     try {
-      webviewView.webview.html = this.render(webviewView.webview);
+      webviewView.webview.html = this.render();
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       webviewView.webview.html =
@@ -151,11 +151,23 @@ class PlansViewProvider {
         message.replace(/</g, "&lt;") +
         "</pre></body></html>";
     }
+    // If the ready handshake is lost (restored webview), still push a list once.
+    setTimeout(() => {
+      if (this.view === webviewView && !this.ready) {
+        this.ready = true;
+        this.refresh();
+      }
+    }, 600);
   }
 
   post(msg) {
-    if (!this.view || !this.ready) return;
-    this.view.webview.postMessage(msg);
+    if (!this.view) return;
+    if (!this.ready) return;
+    try {
+      this.view.webview.postMessage(msg);
+    } catch (err) {
+      console.error("Plans webview postMessage failed:", err);
+    }
   }
 
   refresh() {
@@ -197,19 +209,12 @@ class PlansViewProvider {
     }
   }
 
-  render(webview) {
-    const nonce = cspNonce();
-    const csp =
-      "default-src 'none'; style-src " +
-      (webview && webview.cspSource ? webview.cspSource + " " : "") +
-      "'unsafe-inline'; script-src 'nonce-" +
-      nonce +
-      "' 'unsafe-inline';";
+  render() {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="${csp}" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
   <style>
     :root { color-scheme: light dark; }
     html, body {
@@ -219,7 +224,7 @@ class PlansViewProvider {
       font-family: var(--vscode-font-family, sans-serif);
       font-size: var(--vscode-font-size, 13px);
       color: var(--vscode-foreground, #cccccc);
-      background: transparent;
+      background: var(--vscode-sideBar-background, #252526);
     }
     .wrap { padding: 8px 10px 16px; }
     .tabs {
@@ -478,12 +483,13 @@ class PlansViewProvider {
     <div id="list"><p class="empty" style="color:#9da7b3">Loading plans…</p></div>
     <div id="pager"></div>
   </div>
-  <script nonce="${nonce}">
+  <script>
     try {
     const vscode = acquireVsCodeApi();
     const saved = vscode.getState() || {};
     let allPlans = [];
     let homeDir = "";
+    let homeOmitted = 0;
     let activeHome = null;
     // Persist tab, query, and page when the watcher rebuilds the list.
     let filter = saved.filter || "all";
@@ -597,6 +603,9 @@ class PlansViewProvider {
       let html = "";
       if (homeDir && allPlans.some((p) => p.source === "home")) {
         html += \`<p class="note">Cursor stores plans in <code>\${esc(homeDir)}</code></p>\`;
+        if (homeOmitted > 0) {
+          html += \`<p class="note">\${homeOmitted} more in the home folder. Use <strong>Save to workspace</strong> or search here.</p>\`;
+        }
       }
       if (!activeHome) return html;
       return html + \`<div class="callout">
@@ -624,6 +633,7 @@ class PlansViewProvider {
       if (payload) {
         allPlans = payload.plans || [];
         homeDir = payload.homeDir || "";
+        homeOmitted = payload.homeOmitted || 0;
         activeHome = payload.activeHome || null;
         pruneSelected();
       }
@@ -640,7 +650,7 @@ class PlansViewProvider {
         selbar.innerHTML = selbarHtml();
         pager.innerHTML = "";
         pageUris = [];
-        list.innerHTML = '<p class="empty">No plan files in this project or in <code>' + esc(homeDir || "~/.cursor/plans") + '</code>.</p>';
+        list.innerHTML = '<p class="empty">No plan files in this project or in <code>' + esc(homeDir || "~/.cursor/plans") + '</code>. Run <strong>Plans: Save to workspace</strong> or Import a <code>.cplan</code> file.</p>';
         return;
       }
       qEl.hidden = false;
@@ -831,10 +841,12 @@ function activeHomePlan() {
 function scanPlans() {
   const folders = workspaceFolders();
   const homeDir = homePlansDir();
-  if (!folders.length) return { plans: [], homeDir, activeHome: null };
+  if (!folders.length) return { plans: [], homeDir, homeOmitted: 0, activeHome: null };
+  const listed = listSidebarPlans(folders, homeDir);
   return {
-    plans: listSidebarPlans(folders, homeDir).map(withUri),
+    plans: listed.plans.map(withUri),
     homeDir,
+    homeOmitted: listed.homeOmitted,
     activeHome: activeHomePlan(),
   };
 }
@@ -918,7 +930,7 @@ async function saveActiveEditor() {
 }
 
 function plansForExport(uris) {
-  const all = listSidebarPlans(workspaceFolders(), homePlansDir());
+  const all = listSidebarPlans(workspaceFolders(), homePlansDir()).plans;
   if (!uris || !uris.length) return all;
   const want = new Set(uris);
   return all.filter((p) => want.has(vscode.Uri.file(p.abs).toString()));

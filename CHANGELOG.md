@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.18
+
+- Fix a blank Plans tab when the extension activated more than once (common on Cursor startup)
+
+## 0.0.17
+
+- Same sidebar rules on macOS, Linux, and Windows: project plans plus the 40 newest home-folder plans
+
+## 0.0.16
+
+- Linux and macOS: sidebar lists this project's plans only again (Windows still includes the user home folder)
+
 ## 0.0.15
 
 - Fix the empty sidebar on Windows. Cursor stores plans in `C:\Users\<you>\.cursor\plans`, and the list now reads that folder.

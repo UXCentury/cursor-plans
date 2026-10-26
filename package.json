@@ -2,7 +2,7 @@
   "name": "cursor-plans",
   "displayName": "Cursor Plans",
   "description": "Sidebar for this project's *.plan.md files. Save a home-folder plan into the workspace, export or import a .cplan bundle.",
-  "version": "0.0.15",
+  "version": "0.0.18",
   "publisher": "uxcentury",
   "author": {
     "name": "UXCentury",
